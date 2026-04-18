@@ -419,7 +419,7 @@ def run_analyze(
         _plot_top_tokens(
             tokens=tokens,
             top_n=top_n,
-            output_path=output_dir / f"case_top_tokens_paper_{paper_index}.png",
+            output_path=output_dir / f"shelhamer_top_tokens_paper_{paper_index}.png",
             title=f"Top {top_n} Tokens: {title[:50]}...",
             LOG=LOG,
         )
@@ -434,7 +434,7 @@ def run_analyze(
 
         _plot_wordcloud(
             text=tokens_str,
-            output_path=output_dir / f"case_wordcloud_paper_{paper_index}.png",
+            output_path=output_dir / f"shelhamer_wordcloud_paper_{paper_index}.png",
             title=f"Word Cloud: {title[:50]}...",
             LOG=LOG,
         )
@@ -451,7 +451,7 @@ def run_analyze(
 
         _plot_word_length_histogram(
             tokens=tokens,
-            output_path=output_dir / f"case_word_lengths_paper_{paper_index}.png",
+            output_path=output_dir / f"shelhamer_word_lengths_paper_{paper_index}.png",
             title=f"Word Length Distribution: {title[:50]}...",
             LOG=LOG,
         )

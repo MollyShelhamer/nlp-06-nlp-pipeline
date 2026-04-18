@@ -95,7 +95,7 @@ def main() -> None:
         LOG.info("========================")
 
         # Create unique raw HTML path for each paper
-        paper_raw_html_path = RAW_PATH / f"case_paper_{i}.html"
+        paper_raw_html_path = RAW_PATH / f"shelhamer_paper_{i}.html"
 
         # EXTRACT
         html_content = run_extract(
