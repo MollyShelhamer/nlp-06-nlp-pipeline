@@ -44,14 +44,14 @@ Run from root project folder with:
 import logging
 
 from datafun_toolkit.logger import get_logger, log_header, log_path
+import pandas as pd
 
 from nlp.config_shelhamer import (
     DATA_PATH,
     HTTP_REQUEST_HEADERS,
-    PAGE_URL,
+    PAGE_URLS,
     PROCESSED_CSV_PATH,
     PROCESSED_PATH,
-    RAW_HTML_PATH,
     RAW_PATH,
     ROOT_PATH,
 )
@@ -85,35 +85,65 @@ def main() -> None:
     log_path(LOG, "RAW_PATH", RAW_PATH)
     log_path(LOG, "PROCESSED_PATH", PROCESSED_PATH)
 
-    # EXTRACT
-    html_content = run_extract(
-        source_url=PAGE_URL,
-        http_request_headers=HTTP_REQUEST_HEADERS,
-        raw_html_path=RAW_HTML_PATH,
-        LOG=LOG,
-    )
+    # Initialize empty list to accumulate DataFrames
+    all_dfs = []
 
-    # VALIDATE
-    validated_soup = run_validate(
-        html_content=html_content,
-        LOG=LOG,
-    )
+    # Process each URL
+    for i, page_url in enumerate(PAGE_URLS, 1):
+        LOG.info("========================")
+        LOG.info(f"PROCESSING PAPER {i}/{len(PAGE_URLS)}: {page_url}")
+        LOG.info("========================")
 
-    # TRANSFORM
-    df = run_transform(
-        soup=validated_soup,
-        LOG=LOG,
-    )
+        # Create unique raw HTML path for each paper
+        paper_raw_html_path = RAW_PATH / f"case_paper_{i}.html"
+
+        # EXTRACT
+        html_content = run_extract(
+            source_url=page_url,
+            http_request_headers=HTTP_REQUEST_HEADERS,
+            raw_html_path=paper_raw_html_path,
+            LOG=LOG,
+        )
+
+        # VALIDATE
+        validated_soup = run_validate(
+            html_content=html_content,
+            LOG=LOG,
+        )
+
+        # TRANSFORM
+        df = run_transform(
+            soup=validated_soup,
+            LOG=LOG,
+        )
+
+        # Add paper identifier
+        df['paper_index'] = i
+        df['source_url'] = page_url
+
+        all_dfs.append(df)
+
+    # Combine all DataFrames
+    if all_dfs:
+        combined_df = pd.concat(all_dfs, ignore_index=True)
+        LOG.info("========================")
+        LOG.info("COMBINED DATAFRAME CREATED")
+        LOG.info(f"Total papers processed: {len(combined_df)}")
+        LOG.info(f"Columns: {list(combined_df.columns)}")
+        LOG.info("========================")
+    else:
+        LOG.error("No DataFrames were created!")
+        return
 
     # ANALYZE
     run_analyze(
-        df=df,
+        df=combined_df,
         LOG=LOG,
     )
 
     # LOAD
     run_load(
-        df=df,
+        df=combined_df,
         processed_csv_path=PROCESSED_CSV_PATH,
         LOG=LOG,
     )

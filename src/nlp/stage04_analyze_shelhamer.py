@@ -244,6 +244,110 @@ def _plot_word_length_histogram(
     LOG.info(f"  Saved word length histogram to {output_path}")
 
 
+def _plot_comparative_metrics(
+    df: pd.DataFrame,
+    output_path: Path,
+    LOG: logging.Logger,
+) -> None:
+    """Create a comparative bar chart of key metrics across papers.
+
+    Args:
+        df (pd.DataFrame): DataFrame with paper data.
+        output_path (Path): Path to save the chart image.
+        LOG (logging.Logger): The logger instance.
+    """
+    if df.empty:
+        LOG.warning("No data to plot comparative metrics.")
+        return
+
+    # Prepare data for plotting
+    paper_labels = [f"Paper {int(row['paper_index'])}" for _, row in df.iterrows()]
+    token_counts = df['token_count'].tolist()
+    type_token_ratios = df['type_token_ratio'].tolist()
+    author_counts = df['author_count'].tolist()
+
+    # Create subplots
+    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+
+    # Token count comparison
+    axes[0].bar(paper_labels, token_counts, color='steelblue')
+    axes[0].set_title('Token Count Comparison')
+    axes[0].set_ylabel('Token Count')
+    axes[0].tick_params(axis='x', rotation=45)
+
+    # Type-token ratio comparison
+    axes[1].bar(paper_labels, type_token_ratios, color='skyblue')
+    axes[1].set_title('Type-Token Ratio Comparison')
+    axes[1].set_ylabel('Type-Token Ratio')
+    axes[1].tick_params(axis='x', rotation=45)
+
+    # Author count comparison
+    axes[2].bar(paper_labels, author_counts, color='lightcoral')
+    axes[2].set_title('Author Count Comparison')
+    axes[2].set_ylabel('Author Count')
+    axes[2].tick_params(axis='x', rotation=45)
+
+    plt.tight_layout()
+    plt.savefig(output_path, dpi=150)
+    plt.close()
+
+    LOG.info(f"  Saved comparative metrics chart to {output_path}")
+
+
+def _plot_comparative_word_lengths(
+    df: pd.DataFrame,
+    output_dir: Path,
+    LOG: logging.Logger,
+) -> None:
+    """Create comparative word length histograms for all papers.
+
+    Args:
+        df (pd.DataFrame): DataFrame with paper data.
+        output_dir (Path): Directory to save the chart image.
+        LOG (logging.Logger): The logger instance.
+    """
+    if df.empty:
+        LOG.warning("No data to plot comparative word lengths.")
+        return
+
+    # Create a combined histogram
+    fig, ax = plt.subplots(figsize=(12, 6))
+
+    colors = ['blue', 'red', 'green', 'orange', 'purple', 'brown']
+    max_length = 0
+
+    for idx, row in df.iterrows():
+        tokens_str = str(row.get("tokens", ""))
+        tokens = tokens_str.split() if tokens_str else []
+        if tokens:
+            word_lengths = [len(token) for token in tokens]
+            max_length = max(max_length, max(word_lengths))
+
+            paper_index = int(row.get("paper_index", idx + 1))
+            color = colors[(paper_index - 1) % len(colors)]
+
+            ax.hist(
+                word_lengths,
+                bins=range(1, max_length + 2),
+                alpha=0.5,
+                label=f"Paper {paper_index}",
+                color=color,
+                edgecolor='black',
+            )
+
+    ax.set_xlabel("Word Length (characters)")
+    ax.set_ylabel("Frequency")
+    ax.set_title("Comparative Word Length Distributions")
+    ax.legend()
+
+    plt.tight_layout()
+    output_path = output_dir / "comparative_word_lengths.png"
+    plt.savefig(output_path, dpi=150)
+    plt.close()
+
+    LOG.info(f"  Saved comparative word lengths chart to {output_path}")
+
+
 # ============================================================
 # Section 3. Define Run Analyze Function
 # ============================================================
@@ -265,127 +369,118 @@ def run_analyze(
     """
     LOG.info("========================")
     LOG.info("STAGE 04: ANALYZE starting...")
+    LOG.info(f"Analyzing {len(df)} papers")
     LOG.info("========================")
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # ============================================================
-    # Phase 4.1: Extract token list and summary stats from DataFrame
+    # Phase 4.1: Extract token lists and summary stats from DataFrame
     # ============================================================
-    # The tokens column was stored as a space-joined string for CSV
-    # compatibility. Split it back into a list for frequency analysis.
-    # ============================================================
-
-    LOG.info("========================")
-    LOG.info("PHASE 4.1: Extract tokens and summary statistics")
-    LOG.info("========================")
-
-    # Get the first (and only) row
-    row = df.iloc[0]
-
-    title: str = str(row.get("title", "unknown"))
-    tokens_str: str = str(row.get("tokens", ""))
-    token_count: int = int(row.get("token_count", 0))
-    unique_token_count: int = int(row.get("unique_token_count", 0))
-    type_token_ratio: float = float(row.get("type_token_ratio", 0.0))
-    abstract_word_count: int = int(row.get("abstract_word_count", 0))
-    author_count: int = int(row.get("author_count", 0))
-
-    # Split the space-joined token string back into a list
-    tokens: list[str] = tokens_str.split() if tokens_str else []
-
-    LOG.info(f"  Paper: {title}")
-    LOG.info(f"  Abstract word count (raw):    {abstract_word_count}")
-    LOG.info(f"  Token count (clean):          {token_count}")
-    LOG.info(f"  Unique token count:           {unique_token_count}")
-    LOG.info(f"  Type-token ratio:             {type_token_ratio}")
-    LOG.info(f"  Author count:                 {author_count}")
-
-    # ============================================================
-    # Phase 4.2: Frequency distribution - bar chart
-    # ============================================================
-    # A bar chart of the top N tokens gives an immediate sense of
-    # what the text is about.
-    #
-    # Inspect: do the top tokens reflect the actual topic?
-    # If common domain words (e.g. "model", "data") dominate,
-    # consider whether they add signal or should be removed.
+    # Process each paper in the DataFrame
     # ============================================================
 
     LOG.info("========================")
-    LOG.info(f"PHASE 4.2: Top {top_n} token frequency - bar chart")
+    LOG.info("PHASE 4.1: Extract tokens and summary statistics for all papers")
     LOG.info("========================")
 
-    _plot_top_tokens(
-        tokens=tokens,
-        top_n=top_n,
-        output_path=output_dir / "case_top_tokens.png",
-        title=f"Top {top_n} Tokens: {title}",
-        LOG=LOG,
-    )
+    # Process each paper
+    for idx, row in df.iterrows():
+        paper_index = int(row.get("paper_index", idx + 1))
+        arxiv_id = str(row.get("arxiv_id", "unknown"))
+        title: str = str(row.get("title", "unknown"))
+        tokens_str: str = str(row.get("tokens", ""))
+        token_count: int = int(row.get("token_count", 0))
+        unique_token_count: int = int(row.get("unique_token_count", 0))
+        type_token_ratio: float = float(row.get("type_token_ratio", 0.0))
+        abstract_word_count: int = int(row.get("abstract_word_count", 0))
+        author_count: int = int(row.get("author_count", 0))
+
+        # Split the space-joined token string back into a list
+        tokens: list[str] = tokens_str.split() if tokens_str else []
+
+        LOG.info(f"  Paper {paper_index} ({arxiv_id}): {title}")
+        LOG.info(f"    Abstract word count (raw):    {abstract_word_count}")
+        LOG.info(f"    Token count (clean):          {token_count}")
+        LOG.info(f"    Unique token count:           {unique_token_count}")
+        LOG.info(f"    Type-token ratio:             {type_token_ratio}")
+        LOG.info(f"    Author count:                 {author_count}")
+
+        # ============================================================
+        # Phase 4.2: Frequency distribution - bar chart per paper
+        # ============================================================
+
+        LOG.info("========================")
+        LOG.info(
+            f"PHASE 4.2: Top {top_n} token frequency - bar chart (Paper {paper_index})"
+        )
+        LOG.info("========================")
+
+        _plot_top_tokens(
+            tokens=tokens,
+            top_n=top_n,
+            output_path=output_dir / f"case_top_tokens_paper_{paper_index}.png",
+            title=f"Top {top_n} Tokens: {title[:50]}...",
+            LOG=LOG,
+        )
+
+        # ============================================================
+        # Phase 4.3: Word cloud per paper
+        # ============================================================
+
+        LOG.info("========================")
+        LOG.info(f"PHASE 4.3: Word cloud (Paper {paper_index})")
+        LOG.info("========================")
+
+        _plot_wordcloud(
+            text=tokens_str,
+            output_path=output_dir / f"case_wordcloud_paper_{paper_index}.png",
+            title=f"Word Cloud: {title[:50]}...",
+            LOG=LOG,
+        )
+
+        # ============================================================
+        # Phase 4.4: Word length distribution - histogram per paper
+        # ============================================================
+
+        LOG.info("========================")
+        LOG.info(
+            f"PHASE 4.4: Word length distribution - histogram (Paper {paper_index})"
+        )
+        LOG.info("========================")
+
+        _plot_word_length_histogram(
+            tokens=tokens,
+            output_path=output_dir / f"case_word_lengths_paper_{paper_index}.png",
+            title=f"Word Length Distribution: {title[:50]}...",
+            LOG=LOG,
+        )
 
     # ============================================================
-    # Phase 4.3: Word cloud
-    # ============================================================
-    # A word cloud gives a gestalt view of the text.
-    # Larger words appear more frequently.
-    # It is less precise than a bar chart but easier to read at a glance.
-    #
-    # Inspect: does the word cloud match your expectation of the topic?
-    # Surprises here are worth investigating in the token frequency list.
+    # Phase 4.5: Comparative analysis across papers
     # ============================================================
 
     LOG.info("========================")
-    LOG.info("PHASE 4.3: Word cloud")
+    LOG.info("PHASE 4.5: Comparative analysis across papers")
     LOG.info("========================")
 
-    _plot_wordcloud(
-        text=tokens_str,
-        output_path=output_dir / "case_wordcloud.png",
-        title=f"Word Cloud: {title}",
-        LOG=LOG,
-    )
+    # Create comparative visualizations
+    _plot_comparative_metrics(df, output_dir / "comparative_metrics.png", LOG)
+    _plot_comparative_word_lengths(df, output_dir, LOG)
 
     # ============================================================
-    # Phase 4.4: Word length distribution - histogram
-    # ============================================================
-    # A histogram of word lengths shows the distribution of token lengths.
-    # This can reveal patterns in the vocabulary, such as prevalence of
-    # short function words vs longer content words.
-    #
-    # Inspect: are there many very short or very long words?
-    # Does the distribution look expected for the domain?
+    # Phase 4.6: Log comparative summary
     # ============================================================
 
     LOG.info("========================")
-    LOG.info("PHASE 4.4: Word length distribution - histogram")
+    LOG.info("PHASE 4.6: Comparative summary")
     LOG.info("========================")
 
-    _plot_word_length_histogram(
-        tokens=tokens,
-        output_path=output_dir / "shelhamer_word_lengths.png",
-        title=f"Word Length Distribution: {title}",
-        LOG=LOG,
-    )
-
-    # ============================================================
-    # Phase 4.5: Log top tokens for inline inspection
-    # ============================================================
-    # Even without opening the chart files, the log output lets you
-    # inspect the top tokens directly in the terminal.
-    # This is the text equivalent of looking at the bar chart.
-    # ============================================================
-
-    LOG.info("========================")
-    LOG.info("PHASE 4.5: Top token summary (inline)")
-    LOG.info("========================")
-
-    counter = Counter(tokens)
-    top_tokens = counter.most_common(top_n)
-
-    LOG.info(f"  Top {top_n} tokens by frequency:")
-    for rank, (word, count) in enumerate(top_tokens, start=1):
-        LOG.info(f"    {rank:>3}. {word:<30} {count}")
+    LOG.info("Comparative Statistics:")
+    LOG.info(f"  Total papers: {len(df)}")
+    LOG.info(f"  Average token count: {df['token_count'].mean():.1f}")
+    LOG.info(f"  Average type-token ratio: {df['type_token_ratio'].mean():.4f}")
+    LOG.info(f"  Average author count: {df['author_count'].mean():.1f}")
 
     LOG.info("Sink: visualizations saved to data/processed/")
     LOG.info("Analysis complete.")
