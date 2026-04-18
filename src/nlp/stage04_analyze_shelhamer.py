@@ -363,7 +363,7 @@ def run_analyze(
 
     _plot_word_length_histogram(
         tokens=tokens,
-        output_path=output_dir / "case_word_lengths.png",
+        output_path=output_dir / "shelhamer_word_lengths.png",
         title=f"Word Length Distribution: {title}",
         LOG=LOG,
     )
